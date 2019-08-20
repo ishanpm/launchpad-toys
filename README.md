@@ -1,7 +1,7 @@
 # Launchpad toys
 Some toys and demos for the Launchpad Pro.
 
-[See it live!](https://ishanpm.github.io/launchpad-toys)
+[See it live!](https://ishanpm.github.io/launchpad-toys/)
 
 This is an unpolished collection of random stuff. It uses the WebMidi interface to connect to the Launchpad. If you don't have a Launchpad Pro, the on-screen display will show what it's supposed to look like.
 
