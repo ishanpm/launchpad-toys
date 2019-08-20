@@ -1,11 +1,13 @@
 # Launchpad toys
 Some toys and demos for the Launchpad Pro.
 
-[See it live]()
+[See it live!](https://ishanpm.github.io/launchpad-toys)
 
-This is an unpolished collection of random stuff. This was designed for the Launchpad Pro; other controllers may work with varying levels of success.
+This is an unpolished collection of random stuff. It uses the WebMidi interface to connect to the Launchpad. If you don't have a Launchpad Pro, the on-screen display will show what it's supposed to look like.
 
-Make sure to put the Launchpad in Programmer mode: Hold the settings button and press the orange pad in the top left.
+This was designed for the Launchpad Pro; other controllers may work with varying levels of success. Make sure to put the Launchpad in Programmer mode: Hold the settings button and press the orange pad in the top left.
+
+## The modes
 
 *paint*: Click the control buttons on the right to select a color, and click the pads to draw with that color. Click the circle button on the lower left to fill the entire area with the selected color. Hold one of the pallete buttons to change that button's color. The third and fourth control buttons on the top can go back and forth through a list of images, like a flipbook.
 
