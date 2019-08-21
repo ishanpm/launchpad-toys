@@ -50,6 +50,16 @@ function midiConnectSuccess(m) {
   console.log(m)
   midi = m;
   
+  midiRefreshConnected();
+  
+  updateLights(true)
+}
+
+function midiConnectFail() {
+  console.log("Failed to connect to MIDI")
+}
+
+function midiRefreshConnected() {
   for (e of midi.inputs.entries()) {
     var name = e[0];
     var inp = e[1];
@@ -58,11 +68,22 @@ function midiConnectSuccess(m) {
     }
   }
   
-  updateLights(true)
-}
-
-function midiConnectFail() {
-  console.log("Failed to connect to MIDI")
+  var midiOutBox = $("#midiOut")
+  midiOutBox.empty()
+  
+  for (e of midi.outputs.entries()) {
+    var name = e[0];
+    var inp = e[1];
+    
+    var opt = $("<option>");
+    opt.text(inp.name);
+    opt.attr("value", name);
+    
+    midiOutBox.append(opt);
+    
+    if (inp.name == "MIDIOUT2 (Launchpad Pro)")
+      opt.attr("selected", "selected");
+  }
 }
 
 function midiRecieve(name, data) {
@@ -622,6 +643,11 @@ for (let m in modes) {
 
 $("#modeSelect").on("change",e=>{
   setMode(e.target.value)
+})
+
+$("#midiOut").on("change",e=>{
+  outName = e.target.value;
+  updateLights(true);
 })
 
 function setLight(x, y, color, force) {
