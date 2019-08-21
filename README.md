@@ -5,7 +5,7 @@ Some toys and demos for the Launchpad Pro.
 
 This is an unpolished collection of random stuff. It uses the WebMidi interface to connect to the Launchpad. If you don't have a Launchpad Pro, the on-screen display will show what it's supposed to look like.
 
-This was designed for the Launchpad Pro; other controllers may work with varying levels of success. Make sure to put the Launchpad in Programmer mode: Hold the settings button and press the orange pad in the top left. The program blindly connects to the channel named "output-2" for output; if you have other MIDI devices, try disconnecting them.
+This was designed for the Launchpad Pro; other controllers may work with varying levels of success. Make sure to put the Launchpad in Programmer mode: Hold the settings button and press the orange pad in the top left.
 
 ## The modes
 
