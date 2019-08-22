@@ -81,8 +81,10 @@ function midiRefreshConnected() {
     
     midiOutBox.append(opt);
     
-    if (inp.name == "MIDIOUT2 (Launchpad Pro)")
+    if (inp.name.match("^MIDIOUT2")){
+      outName = name;
       opt.attr("selected", "selected");
+    }
   }
 }
 
