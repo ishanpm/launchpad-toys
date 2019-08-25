@@ -531,75 +531,6 @@ class WebcamMode extends ModeBase {
     }
   }
 }
-/*class RhythmMode extends ModeBase {
-  // This is horribly unfinished, don't bother with it
-  
-  constructor() {
-    super()
-    
-    this.baseSpeed = 120 / 60;
-    this.spawnSpeed = this.baseSpeed;
-    this.spawnNext = Date.now() + this.spawnSpeed * 1000;
-    this.sparks = [];
-  }
-  
-  keyPress(x, y, velocity) {
-    for (var i=0; i<this.sparks.length; i++) {
-      var spark = this.sparks[i];
-      
-      if (spark.x+1 == x && spark.y+1 == y) {
-        this.sparks.splice(i,1);
-        i--;
-      }
-    }
-  }
-  
-  tick() {
-    var now = Date.now();
-    
-    for (let x=1; x<=8; x++) {
-      for (let y=1; y<=8; y++) {
-        setLight(x,y,0);
-      }
-    }
-    
-    if (this.spawnNext < now) {
-      this.spawnNext = Math.max(now, this.spawnNext + 1000/this.spawnSpeed*(Math.random()<0.2?0.5:1));
-      var ox = Math.floor(Math.random()*6)+1;
-      var oy = Math.floor(Math.random()*6)+1;
-      var delay = 1000/(this.baseSpeed*4);
-      var color = 45;
-      var ot = now + delay*8;
-      this.sparks.push({ox, oy, ot, delay, dx: 1, dy: 0, color});
-      this.sparks.push({ox, oy, ot, delay, dx: 0, dy: 1, color});
-      this.sparks.push({ox, oy, ot, delay, dx:-1, dy: 0, color});
-      this.sparks.push({ox, oy, ot, delay, dx: 0, dy:-1, color});
-    }
-    
-    for (var i=0; i<this.sparks.length; i++) {
-      var spark = this.sparks[i];
-      spark.t = (now-spark.ot)/spark.delay;
-      spark.x = spark.ox + spark.dx*Math.floor(spark.t);
-      spark.y = spark.oy + spark.dy*Math.floor(spark.t);
-      
-      if (spark.x>=0 && spark.y>=0 && spark.x<8 && spark.y<8) {
-        setLight(spark.x+1, spark.y+1, spark.color);
-      }
-      
-      if (-spark.t < 7) {
-        setLight(spark.ox+1, spark.oy+1, Math.floor([3,3,3,2,2,1,1][Math.floor(-spark.t)]))
-      }
-    }
-    
-    this.sparks = this.sparks.filter(spark => {
-      return !(   (spark.dx>=0 && spark.x>7)
-               || (spark.dy>=0 && spark.y>7)
-               || (spark.dx<=0 && spark.x<0)
-               || (spark.dy<=0 && spark.y<0)
-               || this.sparks.findIndex(s2 => spark !== s2 && spark.x == s2.x && spark.y == s2.y)>-1);
-    })
-  }
-}*/
 class ChompMode extends ModeBase {
   constructor() {
     super();
@@ -636,8 +567,203 @@ class ChompMode extends ModeBase {
     setLight(1,1,53);
   }
 }
+class TetrisMode extends ModeBase {
+  constructor() {
+    super();
+    
+    this.board = new Array(10).fill(0).map(e=>new Array(10).fill(0))
+    this.next = [];
+    this.hold = 0;
+    this.currentPiece = null;
+    this.selection = [];
+    this.lockHold = false;
+    
+    // empty, I, O, T, S, Z, L, J
+    // y+ is down for this.pieces
+    this.pieces = [[], [[0,0],[1,0],[2,0],[3,0]], [[0,0],[0,1],[1,0],[1,1]], [[0,1],[1,1],[1,0],[2,1]], [[0,1],[1,1],[1,0],[2,0]], [[0,0],[1,0],[1,1],[2,1]], [[0,1],[1,1],[2,1],[2,0]], [[0,0],[0,1],[1,1],[2,1]]];
+    this.pieceShift = [0, 0,1,0,0,0,0,0];
+    this.colors = [1, 37, 13, 53, 21, 5, 9, 45];
+    
+    this.flashDuration = 0.5;
+    
+    this.nextPiece();
+  }
+  
+  nextPiece() {
+    while (this.next.length < 9) {
+      let bag = [1,2,3,4,5,6,7];
+      while (bag.length > 0) {
+        let i = Math.floor(Math.random() * bag.length);
+        this.next.push(bag[i]);
+        bag.splice(i,1);
+      }
+    }
+    
+    this.currentPiece = this.next[0];
+    this.next.splice(0,1);
+    
+    this.lockHold = false;
+    
+    this.updateDisplay();
+  }
+  
+  checkLines() {
+    for (let y=8; y>=1; y--) {
+      let line = true;
+      
+      for (let x=1; x<=8; x++) {
+        if (this.board[y][x] == 0) {
+          line = false;
+          break;
+        }
+      }
+      
+      if (line) {
+        for (let x1=1; x1<=8; x1++) {
+          for (let y1=y; y1<=8; y1++) {
+            if (y1 < 8) {
+              this.board[y1][x1] = this.board[y1+1][x1];
+            } else {
+              this.board[y1][x1] = 0;
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  identifySelection() {
+    let selection = this.selection;
+    let currentPiece = this.pieces[this.currentPiece];
+    
+    if (selection.length == currentPiece.length) {
+      // Crop selection
+      let minX=8, minY=8, maxX=1, maxY=1;
+      let grounded = false;
+      
+      for (let i=0; i<selection.length; i++) {
+        let x=selection[i][0], y=selection[i][1];
+        
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+        
+        if (y == 1 || this.board[y-1][x] != 0) grounded = true;
+      }
+      
+      if (grounded) {
+        // Match selection to current piece
+        function tryMatch(dx, dy, xx, xy, yx, yy) {
+          for (let i=0; i<selection.length; i++) {
+            let match = false;
+            
+            let x = (selection[i][0] - dx) * xx + (selection[i][1] - dy) * yx;
+            let y = (selection[i][0] - dx) * xy + (selection[i][1] - dy) * yy;
+            
+            for (let k=0; k<currentPiece.length; k++) {
+              if (x == currentPiece[k][0] && y == currentPiece[k][1]) {
+                match = true;
+                break;
+              }
+            }
+            
+            if (!match) return false;
+          }
+          
+          return true;
+        }
+        
+        // Current piece is vertically flipped so selection must be flipped to compensate
+        let match = tryMatch(minX, minY, 0, 1, 1, 0)
+                 || tryMatch(minX, maxY, 1, 0, 0,-1)
+                 || tryMatch(maxX, minY,-1, 0, 0, 1)
+                 || tryMatch(maxX, maxY, 0,-1,-1, 0);
+        
+        if (match) {
+          for (let i=0; i<selection.length; i++) {
+            let x = selection[i][0];
+            let y = selection[i][1];
+            this.board[y][x] = this.currentPiece;
+          }
+          this.nextPiece();
+          this.checkLines();
+        }
+      }
+      
+      // Clear selection
+      this.selection = [];
+    }
+  }
+  
+  keyPress(x, y, velocity) {
+    if (x == 0 && y == 8) {
+      // Hold
+      if (!this.lockHold) {
+        if (this.hold == 0) {
+          this.hold = this.currentPiece;
+          this.nextPiece();
+        } else {
+          let temp = this.hold;
+          this.hold = this.currentPiece;
+          this.currentPiece = temp;
+        }
+        
+        this.lockHold = true;
+        this.updateDisplay();
+      }
+    }
+    
+    if (x > 0 && x < 9 && y > 0 && y < 9) {
+      if (this.board[y][x] != 0) return;
+      
+      let pressedSquare = this.selection.findIndex(e => e[0] == x && e[1] == y);
+      if (pressedSquare > -1) {
+        this.selection.splice(pressedSquare, 1);
+      } else if (this.selection.length < 4) {
+        this.selection.push([x, y]);
+        this.identifySelection();
+      }
+    }
+    
+    this.updateDisplay();
+  }
+  
+  updateDisplay() {
+    for (let i=0; i<8; i++) {
+      setLight(9, 8-i, this.colors[this.next[i]]);
+    }
+    
+    setLight(0, 8, this.colors[this.hold]);
+    
+    for (let x=1; x<9; x++) {
+      for (let y=1; y<9; y++) {
+        let hasSelection = this.selection.find(e => e[0] == x && e[1] == y);
+        
+        if (hasSelection) {
+          setLight(x, y, 3);
+        } else {
+          let shift = this.pieceShift[this.currentPiece] + 3;
+          let hasCurrentPiece = this.pieces[this.currentPiece].find(e => e[0]+shift == x && e[1] == 8-y);
+          
+          if (hasCurrentPiece) {
+            setLight(x, y, this.colors[this.currentPiece]);
+          } else if (this.board[y][x] != 0) {
+            setLight(x, y, this.colors[this.board[y][x]]);
+          } else {
+            setLight(x, y, 0);
+          }
+        }
+      }
+    }
+  }
+  
+  tick() {
+    
+  }
+}
 
-modes = {paint: PaintMode, pulse: PulseMode, pressure: PressureMode, chase: ChaseMode, conway: ConwayMode, colortest: ColortestMode, lightsout: LightsOutMode, chomp: ChompMode, /*rhythm: RhythmMode,*/ webcam: WebcamMode};
+modes = {paint: PaintMode, pulse: PulseMode, pressure: PressureMode, chase: ChaseMode, conway: ConwayMode, colortest: ColortestMode, lightsout: LightsOutMode, chomp: ChompMode, tetris: TetrisMode, webcam: WebcamMode};
 
 for (let m in modes) {
   $("#modeSelect").append(`<option>${m}</option>`)

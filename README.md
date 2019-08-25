@@ -25,4 +25,6 @@ This was designed for the Launchpad Pro; other controllers may work with varying
 
 *chomp*: The game of Chomp. Take turns with an opponent. Press a pad to eat that square and all squares above and to the right. Whoever eats the pink square loses. This is rather boring on a square grid, so I suggest blocking off the first row or column before you start.
 
+*tetris*: Draw the shape at the top of the screen somewhere on the board, resting on another block. Fill a straight line of blocks to clear it. Click the control button at the upper left to hold a piece for later use.
+
 *webcam*: Displays your webcam! This is the only mode that requires SysEx messages to work, since it sets RGB values directly.
