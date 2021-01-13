@@ -104,9 +104,14 @@ function midiRecieve(name, data) {
     }
   }
   
-  // Aftertouch
+  // Key aftertouch
+  if (data[0] == 160) {
+    mode.keyAftertouch(x, y, data[2])
+  }
+  
+  // Channel aftertouch
   if (data[0] == 208) {
-    mode.keyAftertouch(data[1])
+    mode.channelAftertouch(data[1])
   }
 }
 
@@ -162,6 +167,7 @@ class ModeBase {
   keyPress(x, y, velocity) {}
   keyRelease(x, y) {}
   keyAftertouch(x, y, velocity) {}
+  channelAftertouch(velocity) {}
   tick() {}
   destroy() {}
 }
@@ -205,7 +211,11 @@ class PaintMode extends ModeBase {
     }
     
     if (this.showPallete) {
-      this.pallete[this.palleteHold-1] = mod((y-1)*8 + x-1,128);
+      // set brush
+      let color = mod((y-1)*8 + x-1,128)
+      console.log(`brush ${this.palleteHold-1} = ${color}`)
+
+      this.pallete[this.palleteHold-1] = color;
       setLight(9, this.palleteHold, this.pallete[this.palleteHold-1]);
       this.brush = this.pallete[this.palleteHold-1];
       setLight(0,1,this.brush);
@@ -296,12 +306,21 @@ class PulseMode extends ModeBase {
   }
   
   keyPress(x, y, velocity) {
-    this.pulses.push({x, y, life: 1})
+    this.pulses.push({x, y, life: Infinity})
+  }
+  
+  keyRelease(x, y) {
+    let pulsesOnLight = this.pulses.filter(e => e.x == x&& e.y == y);
+    for (let p of pulsesOnLight) {
+      if (p.life == Infinity) p.life = 1;
+    }
   }
 
   tick() {
     for (let i=0; i<this.pulses.length; i++) {
-      if (this.pulses[i].life <= 0) {
+      if (this.pulses[i].life == Infinity) {
+        setLight(this.pulses[i].x, this.pulses[i].y, 37)
+      } else if (this.pulses[i].life <= 0) {
         setLight(this.pulses[i].x, this.pulses[i].y, 0)
         this.pulses.splice(i,1)
         i--;
@@ -316,10 +335,34 @@ class PulseMode extends ModeBase {
 class PressureMode extends ModeBase {
   constructor() {
     super();
+    this.digitColors = [0, 5, 9, 13, 21, 37, 45, 49, 53, 3]
     //this.grid = Array(10).fill().map(e=>Array(10).fill(0));
   }
   
-  keyAftertouch(velocity) {
+  // Write a 3-digit number in rainbow colors
+  writeNumber(x, y, num) {
+    x = Math.max(x, 2);
+    setLight(x-2, y, this.digitColors[Math.floor(num/100)%10])
+    setLight(x-1, y, this.digitColors[Math.floor(num/10 )%10])
+    setLight(x  , y, this.digitColors[Math.floor(num    )%10])
+  }
+  
+  keyPress(x, y, velocity) {
+    this.keyAftertouch(x, y, velocity)
+  }
+  
+  keyRelease(x, y) {
+    this.keyAftertouch(x, y, 0)
+  }
+  
+  keyAftertouch(x, y, velocity) {
+    this.writeNumber(x, y, velocity)
+  }
+  
+  channelAftertouch(velocity) {
+    this.writeNumber(8, 0, velocity)
+    
+    /*
     for (var i=0; i<64; i++) {
       var x = i%8 + 1;
       var y = Math.floor(i/8) + 1;
@@ -337,26 +380,8 @@ class PressureMode extends ModeBase {
       
       setLight(x, y, color)
     }
+    */
   }
-  
-/*
-  keyPress(x, y, velocity) {
-    this.pulses.push({x, y, life: 1})
-  }
-
-  tick() {
-    for (let i=0; i<this.pulses.length; i++) {
-      if (this.pulses[i].life <= 0) {
-        setLight(this.pulses[i].x, this.pulses[i].y, 0)
-        this.pulses.splice(i,1)
-        i--;
-      } else {
-        var color = [1,2,3][Math.floor(this.pulses[i].life*3)]
-        this.pulses[i].life -= 1/60;
-        setLight(this.pulses[i].x, this.pulses[i].y, color)
-      }
-    }
-  }*/
 }
 class ChaseMode extends ModeBase {
   constructor() {
