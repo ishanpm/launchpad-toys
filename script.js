@@ -18,12 +18,28 @@ colorMap = [
 
 displayMap = colorMap.map(color=>"#"+lighten(color).toString(16).padStart(6,"0"));
 
+const MIDI_COMMAND_MASK = 0xF0;
+const MIDI_CHANNEL_MASK = 0x0F;
+
+const MIDI_NOTE_OFF = 0x80;
+const MIDI_NOTE_ON = 0x90;
+const MIDI_NOTE_AFTERTOUCH = 0xA0;
+const MIDI_CC = 0xB0;
+const MIDI_PC = 0xC0;
+const MIDI_CHANNEL_AFTERTOUCH = 0xD0;
+const MIDI_PITCH_WHEEL = 0xE0;
+const MIDI_SYSTEM = 0xF0;
+
+const MIDI_SYSEX_START = 0xF0;
+const MIDI_SYSEX_END = 0xF7;
+
 ctx = $("#board")[0].getContext("2d");
 midi = null;
 webcam = null;
 outName = "output-2";
 board = Array(10).fill(0).map(e=>Array(10).fill(0));
 dirty = Array(10).fill(0).map(e=>Array(10).fill(false));
+outputChannel = 0;
 
 mode = null;
 lastTime = 0;
@@ -91,26 +107,37 @@ function midiRefreshConnected() {
 function midiRecieve(name, data) {
   //console.log(name, data);
   
+  var command = data[0] & MIDI_COMMAND_MASK;
+  var channel = data[0] & MIDI_CHANNEL_MASK;
+  
   var x = data[1]%10
   var y = Math.floor(data[1]/10)%10
   
+  
   // Press/release
-  // 144 is pad buttons and 176 is control buttons
-  if (data[0] == 144 || data[0] == 176) {
+  // (note on, CC)
+  if (command == MIDI_NOTE_ON || command == MIDI_CC) {
     if (data[2] == 0) {
-      mode.keyRelease(x, y)
+      // Note off
+      mode.keyRelease(x, y);
     } else {
+      // Note on
       mode.keyPress(x, y, data[2]);
     }
   }
   
+  // Note off
+  if (command == MIDI_NOTE_OFF) {
+    mode.keyRelease(x, y);
+  }
+  
   // Key aftertouch
-  if (data[0] == 160) {
+  if (command == MIDI_NOTE_AFTERTOUCH) {
     mode.keyAftertouch(x, y, data[2])
   }
   
   // Channel aftertouch
-  if (data[0] == 208) {
+  if (command == MIDI_CHANNEL_AFTERTOUCH) {
     mode.channelAftertouch(data[1])
   }
 }
@@ -175,19 +202,22 @@ class PaintMode extends ModeBase {
   constructor() {
     super()
     //this.pallete = [0,1,7,15,23,39,47,55];
-    this.pallete = [0,3,5,13,21,37,45,53];
-    this.brush = this.pallete[1];
+    this.palette = [0,3,5,13,21,37,45,53];
+    this.brush = this.palette[1];
     this.frames = [];
     this.frameNum = 0;
     
-    this.showPallete = false;
-    this.palleteHold = -1;
-    this.palleteHoldTime = 0;
+    this.paletteVisible = false;
+    this.palettePage = 0;
+    this.paletteHold = -1;
+    this.paletteHoldTime = 0;
     
     for (var i=0; i<8; i++) {
-      setLight(9, i+1, this.pallete[i])
+      setLight(9, i+1, this.palette[i])
     }
     setLight(0,1,this.brush);
+
+    this.loadFrame(0);
   }
 
   saveFrame(i) {
@@ -199,48 +229,86 @@ class PaintMode extends ModeBase {
       this.frames[i] = Array(8).fill(0).map(r=>Array(8).fill(0));
     }
     this.frames[i].forEach((r,y)=>r.forEach((c,x)=>setLight(x+1,y+1,c)));
+
+    // Page buttons
+    setLight(3, 9, i>0 ? 3 : 1);
+    setLight(4, 9, i<(this.frames.length-1) ? 3 : 1);
+
+    // Shift key
+    setLight(0, 8, 0);
+  }
+
+  showPalette(page) {
+    if (!this.paletteVisible) {
+      this.saveFrame(this.frameNum);
+    }
+
+    this.paletteVisible = true;
+    this.palettePage = page;
+
+    for (var i=0; i<64; i++) {
+      setLight(i%8+1, Math.floor(i/8)+1, i + (this.palettePage * 64));
+    }
+
+    // Shift key
+    setLight(0, 8, 3);
   }
 
   keyPress(x, y, velocity) {
-    if (x == 9) {
-      this.brush = this.pallete[y-1];
-      setLight(0,1,this.brush);
-      this.palleteHold = y;
-      this.palleteHoldTime = Date.now() + 500;
-      return;
-    }
+    let isControl = (x < 1 || x > 8 || y < 1 || y > 8)
     
-    if (this.showPallete) {
-      // set brush
-      let color = mod((y-1)*8 + x-1,128)
-      console.log(`brush ${this.palleteHold-1} = ${color}`)
+    if (this.paletteVisible) {
+      if (isControl) {
+        if (x == 0 && y == 8) {
+          let newPage = (this.palettePage + 1) % 2;
+          this.showPalette(newPage);
+        } else if (x == 9 && y == this.paletteHold) {
+          // cancel
+          setLight(9, this.paletteHold, this.palette[this.paletteHold-1]);
+          
+          this.loadFrame(this.frameNum);
+          this.paletteVisible = false;
+          this.paletteHold = -1;
+        }
+        return;
+      }
 
-      this.pallete[this.palleteHold-1] = color;
-      setLight(9, this.palleteHold, this.pallete[this.palleteHold-1]);
-      this.brush = this.pallete[this.palleteHold-1];
+      // set brush
+      let color = mod((y-1)*8 + x-1 + (this.palettePage*64),128)
+      console.log(`brush ${this.paletteHold-1} = ${color}`)
+
+      this.palette[this.paletteHold-1] = color;
+      setLight(9, this.paletteHold, this.palette[this.paletteHold-1]);
+      this.brush = this.palette[this.paletteHold-1];
       setLight(0,1,this.brush);
       
       this.loadFrame(this.frameNum);
-      this.showPallete = false;
-      this.palleteHold = -1;
+      this.paletteVisible = false;
+      this.paletteHold = -1;
+
+      return;
     } else {
-      if (x == 0) {
-        if (y == 1) {
+      if (isControl) {
+        if (x == 0 && y == 1) {
+          // Brush button (fill)
           for (var x=1; x<9; x++) {
             for (var y=1; y<9; y++) {
               setLight(x, y, this.brush);
             }
           }
-        }
-        return;
-      }
-      
-      if (y == 9) {
-        if (x == 3 && this.frameNum > 0) {
+        } else if (x == 9) {
+          // Palette buttons
+          this.brush = this.palette[y-1];
+          setLight(0,1,this.brush);
+          this.paletteHold = y;
+          this.paletteHoldTime = Date.now() + 500;
+        } else if (x == 3 && y == 9 && this.frameNum > 0) {
+          // Previous frame
           this.saveFrame(this.frameNum);
           this.frameNum--;
           this.loadFrame(this.frameNum);
-        } else if (x == 4) {
+        } else if (x == 4 && y == 9) {
+          // Next frame
           this.saveFrame(this.frameNum);
           this.frameNum++;
           this.loadFrame(this.frameNum);
@@ -253,18 +321,14 @@ class PaintMode extends ModeBase {
   }
   
   keyRelease(x, y) {
-    if (x == 9 && y == this.palleteHold && !this.showPallete)
-      this.palleteHold = -1;
+    if (x == 9 && y == this.paletteHold && !this.paletteVisible)
+      this.paletteHold = -1;
   }
   
   tick() {
-    if (this.palleteHold != -1 && Date.now() > this.palleteHoldTime && !this.showPallete) {
-      this.saveFrame(this.frameNum)
-      for (var i=0; i<64; i++) {
-        setLight(i%8+1, Math.floor(i/8)+1, i);
-      }
-      this.showPallete = true;
-      setLight(9, this.palleteHold, 1);
+    if (this.paletteHold != -1 && Date.now() > this.paletteHoldTime && !this.paletteVisible) {
+      setLight(9, this.paletteHold, 1);
+      this.showPalette(0);
     }
   }
 }
@@ -361,26 +425,6 @@ class PressureMode extends ModeBase {
   
   channelAftertouch(velocity) {
     this.writeNumber(8, 0, velocity)
-    
-    /*
-    for (var i=0; i<64; i++) {
-      var x = i%8 + 1;
-      var y = Math.floor(i/8) + 1;
-      
-      var n = i*2 + 1;
-      var color;
-      
-      if (n == velocity) {
-        color = 45;
-      } else if (n < velocity) {
-        color = 5;
-      } else {
-        color = 0;
-      }
-      
-      setLight(x, y, color)
-    }
-    */
   }
 }
 class ChaseMode extends ModeBase {
@@ -806,7 +850,7 @@ $("#midiOut").on("change",e=>{
 function setLight(x, y, color, force) {
   if (force) {
     board[y][x] = color;
-    midiSend([144, (y*10+x)%100, color%128])
+    midiSend([MIDI_NOTE_ON | outputChannel, (y*10+x)%100, color%128])
   } else if (board[y][x] != color) {
     board[y][x] = color;
     dirty[y][x] = true;
@@ -814,7 +858,7 @@ function setLight(x, y, color, force) {
 }
 
 function setLightRaw(x, y, r, g, b) {
-  midiSend([240,0,32,41,2,16,11,y*10+x,r,g,b,247])
+  midiSend([MIDI_SYSEX_START,0,32,41,2,16,11,y*10+x,r,g,b,MIDI_SYSEX_END])
 }
 
 function updateLights(force) {
@@ -827,7 +871,7 @@ function updateLights(force) {
     for (var x=0; x<board[0].length; x++) {
       if (dirty[y][x] || force) {
         drawButton(x, y, board[y][x]%128)
-        midiSend([144, (y*10+x)%100, board[y][x]%128]);
+        midiSend([MIDI_NOTE_ON | outputChannel, (y*10+x)%100, board[y][x]%128]);
         dirty[y][x] = false;
       }
     }
